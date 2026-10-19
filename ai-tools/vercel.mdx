@@ -1,0 +1,165 @@
+---
+title: "Vercel integration"
+description: "Connect your HitPay account to Vercel and get API credentials in your projects"
+icon: "triangle"
+tag: "New"
+---
+
+The HitPay integration for Vercel connects your HitPay account to your Vercel projects. You approve access once with HitPay sign-in, choose the projects that take payments, and the integration writes your HitPay credentials to those projects as environment variables. There are no API keys to copy.
+
+<Frame>
+  <img src="/images/ai-tools/vercel/overview.png" alt="HitPay checkout with PayNow, GrabPay, GCash, DuitNow and card logos, shown next to the HitPay × Vercel lockup" />
+</Frame>
+
+## What you get
+
+Each project you select receives these environment variables:
+
+| Variable | Value | Environments |
+| --- | --- | --- |
+| `HITPAY_ACCESS_TOKEN` | OAuth access token for your HitPay business (sensitive) | Production, Preview |
+| `HITPAY_API_BASE` | `https://api.hit-pay.com` | All |
+| `HITPAY_API_MODE` | `live` | All |
+| `HITPAY_BUSINESS_ID` | Your HitPay business ID | All |
+
+Use the token server-side only. It's scoped to the permissions you approve, and you can revoke it from your HitPay dashboard at any time.
+
+## Prerequisites
+
+- A Vercel account or team
+- A HitPay account where you're an **Owner** or **Admin**
+
+## Install the integration
+
+<Steps>
+  <Step title="Add the integration">
+    Open the [HitPay integration on Vercel](https://vercel.com/integrations/hitpay) and click **Connect Account**. Choose your Vercel team and the projects to connect.
+  </Step>
+  <Step title="Connect your HitPay account">
+    Vercel opens the HitPay setup page. Click **Connect HitPay**, sign in to HitPay, choose your business, and approve access.
+
+    <Frame>
+      <img src="/images/ai-tools/vercel/connect.png" alt="Connect your HitPay account card showing a live connection and the approved access scopes" />
+    </Frame>
+  </Step>
+  <Step title="Choose your projects">
+    Select the Vercel projects that should receive HitPay credentials, then click **Save env vars to projects**.
+
+    <Frame>
+      <img src="/images/ai-tools/vercel/projects.png" alt="Project picker with storefront and checkout-api selected" />
+    </Frame>
+  </Step>
+  <Step title="Redeploy">
+    Click **Return to Vercel**, then redeploy your projects. Vercel only applies new environment variables to new deployments.
+
+    <Frame>
+      <img src="/images/ai-tools/vercel/env-vars.png" alt="Environment variables written by the integration: HITPAY_ACCESS_TOKEN, HITPAY_API_BASE, HITPAY_API_MODE and HITPAY_BUSINESS_ID" />
+    </Frame>
+  </Step>
+</Steps>
+
+## Accept a payment
+
+Call the HitPay API from your server with the token as a Bearer token. Requests and responses are the same as with an API key; only the `Authorization` header changes.
+
+<Frame>
+  <img src="/images/ai-tools/vercel/api-call.png" alt="Code that creates a HitPay payment request using HITPAY_API_BASE and HITPAY_ACCESS_TOKEN" />
+</Frame>
+
+<Steps>
+  <Step title="Create a payment request">
+    ```ts app/api/checkout/route.ts
+    export async function POST(request: Request) {
+      const { HITPAY_API_BASE, HITPAY_ACCESS_TOKEN } = process.env;
+      const origin = new URL(request.url).origin;
+
+      const res = await fetch(`${HITPAY_API_BASE}/v1/payment-requests`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${HITPAY_ACCESS_TOKEN}`,
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: new URLSearchParams({
+          amount: "25.00",
+          currency: "SGD",
+          reference_number: "order-123",
+          redirect_url: `${origin}/checkout/complete`,
+        }),
+      });
+
+      const { id, url } = await res.json();
+      // Store `id` with your order, then send the customer to `url`.
+      return Response.json({ id, url });
+    }
+    ```
+  </Step>
+  <Step title="Send the customer to checkout">
+    Redirect the customer to the returned `url`. HitPay's hosted checkout shows the payment methods enabled on your account, such as PayNow, GrabPay and cards.
+  </Step>
+  <Step title="Confirm the payment">
+    When the customer returns to your `redirect_url`, read the payment request from HitPay and check that its `status` is `completed`:
+
+    ```ts
+    const res = await fetch(`${process.env.HITPAY_API_BASE}/v1/payment-requests/${id}`, {
+      headers: { Authorization: `Bearer ${process.env.HITPAY_ACCESS_TOKEN}` },
+    });
+    const { status } = await res.json(); // "completed" once paid
+    ```
+
+    <Warning>
+      Don't treat the redirect itself as proof of payment. Always confirm the status with the API.
+    </Warning>
+  </Step>
+</Steps>
+
+You can also pass a `webhook` URL when you create the payment request to have HitPay notify your server when the payment completes.
+
+## What the token can do
+
+The token covers the scopes approved on the HitPay app:
+
+- **Payments**: create and read payment requests, charges, refunds and recurring billing
+- **Commerce**: products, orders and invoices
+- **Customers**
+
+Webhook registration, virtual accounts, static QR codes and terminals still need a HitPay API key. See [Connect merchant accounts (OAuth)](https://docs.hitpayapp.com/platforms/oauth) for details.
+
+## Local development
+
+Vercel doesn't allow sensitive variables in the Development environment, so `vercel env pull` doesn't download `HITPAY_ACCESS_TOKEN`. Add a token to `.env.local` for local work:
+
+```bash .env.local
+HITPAY_ACCESS_TOKEN=your-token
+HITPAY_API_BASE=https://api.hit-pay.com
+```
+
+<Note>
+  The integration currently connects live HitPay accounts only, so payments made while testing are real. Use a small amount and refund it from your HitPay dashboard.
+</Note>
+
+## Manage the integration
+
+**Change projects or reconnect**: In your Vercel dashboard, go to **Integrations**, open **HitPay**, and click **Configure**. Open it in the same browser you installed with.
+
+**Token refresh**: Access tokens last one year. The integration refreshes them 30 days before they expire and updates `HITPAY_ACCESS_TOKEN` on your projects. Redeploy to pick up the new token.
+
+**Revoke access**: In your HitPay dashboard, go to **Developers** > **Connected Apps** and remove the app. Calls made with the token fail immediately afterwards.
+
+**Uninstall**: Remove the integration from your Vercel dashboard. The integration deletes the HitPay environment variables it added to your projects.
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="The setup page says this browser isn't authorized">
+    The setup page only opens in the browser you installed the integration with. Open **Configure** from the integration in your Vercel dashboard in that browser, or reinstall the integration.
+  </Accordion>
+  <Accordion title="Connecting HitPay fails after you approve access">
+    Only business **Owners** and **Admins** can approve access. Sign in to HitPay with one of those roles and try again.
+  </Accordion>
+  <Accordion title="Your app can't find the environment variables">
+    Redeploy the project. Environment variables only reach deployments created after they're added.
+  </Accordion>
+  <Accordion title="API calls return 401 Unauthorized">
+    The token was revoked or has expired. Open **Configure** on the integration, click **Reconnect**, save the env vars to your projects again, and redeploy.
+  </Accordion>
+</AccordionGroup>
