@@ -18,7 +18,7 @@ Each project you select receives these environment variables:
 | Variable | Value | Environments |
 | --- | --- | --- |
 | `HITPAY_ACCESS_TOKEN` | OAuth access token for your HitPay business (sensitive) | Production, Preview |
-| `HITPAY_API_BASE` | `https://api.hit-pay.com` | All |
+| `HITPAY_API_BASE` | `https://api.hit-pay.com` (optional in code; default to this value) | All |
 | `HITPAY_API_MODE` | `live` | All |
 | `HITPAY_BUSINESS_ID` | Your HitPay business ID | All |
 
@@ -70,13 +70,14 @@ Call the HitPay API from your server with the token as a Bearer token. Requests 
   <Step title="Create a payment request">
     ```ts app/api/checkout/route.ts
     export async function POST(request: Request) {
-      const { HITPAY_API_BASE, HITPAY_ACCESS_TOKEN } = process.env;
+      const base = process.env.HITPAY_API_BASE ?? "https://api.hit-pay.com";
+      const token = process.env.HITPAY_ACCESS_TOKEN;
       const origin = new URL(request.url).origin;
 
-      const res = await fetch(`${HITPAY_API_BASE}/v1/payment-requests`, {
+      const res = await fetch(`${base}/v1/payment-requests`, {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${HITPAY_ACCESS_TOKEN}`,
+          Authorization: `Bearer ${token}`,
           "Content-Type": "application/x-www-form-urlencoded",
         },
         body: new URLSearchParams({
@@ -100,7 +101,8 @@ Call the HitPay API from your server with the token as a Bearer token. Requests 
     When the customer returns to your `redirect_url`, read the payment request from HitPay and check that its `status` is `completed`:
 
     ```ts
-    const res = await fetch(`${process.env.HITPAY_API_BASE}/v1/payment-requests/${id}`, {
+    const base = process.env.HITPAY_API_BASE ?? "https://api.hit-pay.com";
+    const res = await fetch(`${base}/v1/payment-requests/${id}`, {
       headers: { Authorization: `Bearer ${process.env.HITPAY_ACCESS_TOKEN}` },
     });
     const { status } = await res.json(); // "completed" once paid
@@ -113,6 +115,25 @@ Call the HitPay API from your server with the token as a Bearer token. Requests 
 </Steps>
 
 You can also pass a `webhook` URL when you create the payment request to have HitPay notify your server when the payment completes.
+
+## Use with v0 and other AI coding tools
+
+AI coding tools such as v0 can't run the integration's install flow, so they may ask you to paste `HITPAY_ACCESS_TOKEN` or `HITPAY_API_BASE` into an environment variable form. Skip that form. The token only comes from installing the integration:
+
+<Steps>
+  <Step title="Install HitPay on the project">
+    Find the Vercel project your v0 chat deploys to. Open the [HitPay integration](https://vercel.com/integrations/hitpay), click **Connect Account**, choose that project, and connect your HitPay account.
+  </Step>
+  <Step title="Redeploy">
+    Deploy again from v0 or Vercel. The deployed app reads `HITPAY_ACCESS_TOKEN` from the project.
+  </Step>
+</Steps>
+
+You don't need `HITPAY_API_BASE`: the code above defaults it to `https://api.hit-pay.com`.
+
+<Tip>
+  Point your agent at [vercel-connect.hitpay.dev/llms.txt](https://vercel-connect.hitpay.dev/llms.txt). It tells AI coding tools to send you to the install link instead of asking for credentials.
+</Tip>
 
 ## What the token can do
 
@@ -130,7 +151,6 @@ Vercel doesn't allow sensitive variables in the Development environment, so `ver
 
 ```bash .env.local
 HITPAY_ACCESS_TOKEN=your-token
-HITPAY_API_BASE=https://api.hit-pay.com
 ```
 
 <Note>
@@ -155,6 +175,9 @@ HITPAY_API_BASE=https://api.hit-pay.com
   </Accordion>
   <Accordion title="Connecting HitPay fails after you approve access">
     Only business **Owners** and **Admins** can approve access. Sign in to HitPay with one of those roles and try again.
+  </Accordion>
+  <Accordion title="v0 asks you to enter HITPAY_ACCESS_TOKEN">
+    Skip the form. Install the integration on the project the chat deploys to, then redeploy. See [Use with v0 and other AI coding tools](#use-with-v0-and-other-ai-coding-tools).
   </Accordion>
   <Accordion title="Your app can't find the environment variables">
     Redeploy the project. Environment variables only reach deployments created after they're added.
